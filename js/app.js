@@ -1,207 +1,153 @@
-function loadLibrary() {
+/* ============================================================
+   APP.JS — Core Logic (Scraper‑Free Version)
+   Handles:
+   - Saving series
+   - Loading library
+   - Deleting series
+   - Navigation to series/chapters/reader
+============================================================ */
+
+/* -----------------------------
+   LOCAL STORAGE HELPERS
+----------------------------- */
+
+function getLibrary() {
     return JSON.parse(localStorage.getItem("manhwaLibrary") || "[]");
 }
 
-function saveLibrary() {
-    localStorage.setItem("manhwaLibrary", JSON.stringify(library));
+function saveLibrary(list) {
+    localStorage.setItem("manhwaLibrary", JSON.stringify(list));
 }
 
-let library = loadLibrary();
+/* -----------------------------
+   ADD NEW SERIES
+----------------------------- */
 
-function generateId() {
-    return "m" + Math.random().toString(36).substr(2, 9);
-}
+async function addSeries(data) {
+    const library = getLibrary();
 
-function getSeriesById(id) {
-    return library.find(s => s.id === id);
-}
+    // Convert cover image to Base64
+    let coverBase64 = "";
+    if (data.coverFile) {
+        coverBase64 = await fileToBase64(data.coverFile);
+    }
 
-function addSeries({ url, title, image, baseChapterURL, totalChapters, currentChapter }) {
-    const series = {
-        id: generateId(),
-        url,
-        title: title || "Untitled",
-        image: image || null,
-        genres: "",
-        status: "reading",
-        baseChapterURL: baseChapterURL || null,
-        totalChapters: totalChapters || null,
-        currentChapter: currentChapter || 1,
-        updatedAt: Date.now()
+    const newSeries = {
+        id: Date.now(),
+        title: data.title,
+        cover: coverBase64,
+        baseURL: data.baseURL,
+        totalChapters: Number(data.totalChapters),
+        startChapter: Number(data.startChapter),
+        status: data.status,
+        progress: data.startChapter
     };
 
-    library.push(series);
-    saveLibrary();
-    return series;
+    library.push(newSeries);
+    saveLibrary(library);
+    loadLibrary();
 }
 
-function updateSeries(series, data) {
-    Object.assign(series, data);
-    series.updatedAt = Date.now();
-    saveLibrary();
+/* -----------------------------
+   FILE → BASE64
+----------------------------- */
+
+function fileToBase64(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+    });
 }
 
-function deleteSeries(id) {
-    library = library.filter(s => s.id !== id);
-    saveLibrary();
-}
+/* -----------------------------
+   LOAD LIBRARY GRID
+----------------------------- */
 
-function sortLibrary(mode) {
-    if (mode === "az") {
-        library.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (mode === "updated") {
-        library.sort((a, b) => b.updatedAt - a.updatedAt);
-    } else if (mode === "progress") {
-        library.sort((a, b) => {
-            const pa = a.totalChapters ? a.currentChapter / a.totalChapters : 0;
-            const pb = b.totalChapters ? b.currentChapter / b.totalChapters : 0;
-            return pb - pa;
-        });
-    }
-    saveLibrary();
-}
-
-function searchLibrary(query) {
-    query = query.toLowerCase();
-    return library.filter(s => s.title.toLowerCase().includes(query));
-}
-
-function statusDotClass(status) {
-    if (status === "completed") return "status-completed";
-    if (status === "hold") return "status-hold";
-    return "status-reading";
-}
-
-function statusText(status) {
-    if (status === "completed") return "Completed";
-    if (status === "hold") return "On Hold";
-    return "Reading";
-}
-
-function getProgressPercent(series) {
-    if (!series.totalChapters || !series.currentChapter) return 0;
-    return Math.min(100, (series.currentChapter / series.totalChapters) * 100);
-}
-
-function updateSeriesProgressUI(series) {
-    const fill = document.getElementById("seriesProgressFill");
-    const text = document.getElementById("seriesProgressText");
-    if (!fill || !text) return;
-
-    const percent = getProgressPercent(series);
-    fill.style.width = percent + "%";
-    text.textContent = `Chapter ${series.currentChapter || 0} of ${series.totalChapters || "?"} (${percent.toFixed(1)}%)`;
-}
-
-function renderLibraryGrid() {
+function loadLibrary() {
+    const library = getLibrary();
     const grid = document.getElementById("libraryGrid");
-    if (!grid) return;
-
     grid.innerHTML = "";
+
+    if (library.length === 0) {
+        grid.innerHTML = `<p style="opacity:0.6;">No series added yet.</p>`;
+        return;
+    }
 
     library.forEach(series => {
         const card = document.createElement("div");
         card.className = "card";
+        card.onclick = () => openSeries(series.id);
 
         card.innerHTML = `
-            <div class="card-delete">×</div>
-            <img class="card-img" src="${series.image || "assets/default-cover.png"}">
+            <img src="${series.cover || 'assets/default-cover.png'}" />
             <div class="card-title">${series.title}</div>
         `;
-
-        card.addEventListener("click", () => {
-            window.location.href = `series.html?id=${series.id}`;
-        });
-
-        card.querySelector(".card-delete").onclick = (e) => {
-            e.stopPropagation();
-            if (confirm(`Delete "${series.title}"?`)) {
-                deleteSeries(series.id);
-                renderLibraryGrid();
-            }
-        };
 
         grid.appendChild(card);
     });
 }
 
-function exportLibrary() {
-    const data = JSON.stringify(library, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
+/* -----------------------------
+   OPEN SERIES PAGE
+----------------------------- */
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "manhwa-library.json";
-    a.click();
-
-    URL.revokeObjectURL(url);
+function openSeries(id) {
+    localStorage.setItem("currentSeries", id);
+    window.location.href = "series.html";
 }
 
-function importLibrary(jsonText) {
-    try {
-        const data = JSON.parse(jsonText);
-        if (Array.isArray(data)) {
-            library = data;
-            saveLibrary();
-            return true;
-        }
-    } catch (e) {
-        return false;
-    }
-    return false;
+/* -----------------------------
+   DELETE SERIES
+----------------------------- */
+
+function deleteSeries(id) {
+    let library = getLibrary();
+    library = library.filter(s => s.id !== id);
+    saveLibrary(library);
+    loadLibrary();
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    if (document.getElementById("libraryGrid")) {
-        renderLibraryGrid();
+/* -----------------------------
+   GET CURRENT SERIES
+----------------------------- */
 
-        const searchInput = document.getElementById("searchInput");
-        if (searchInput) {
-            searchInput.addEventListener("input", () => {
-                const results = searchLibrary(searchInput.value);
-                renderSearchResults(results);
-            });
-        }
-
-        const sortSelect = document.getElementById("sortSelect");
-        if (sortSelect) {
-            sortSelect.addEventListener("change", () => {
-                sortLibrary(sortSelect.value);
-                renderLibraryGrid();
-            });
-        }
-    }
-});
-
-function renderSearchResults(results) {
-    const grid = document.getElementById("libraryGrid");
-    if (!grid) return;
-
-    grid.innerHTML = "";
-
-    results.forEach(series => {
-        const card = document.createElement("div");
-        card.className = "card";
-
-        card.innerHTML = `
-            <div class="card-delete">×</div>
-            <img class="card-img" src="${series.image || "assets/default-cover.png"}">
-            <div class="card-title">${series.title}</div>
-        `;
-
-        card.addEventListener("click", () => {
-            window.location.href = `series.html?id=${series.id}`;
-        });
-
-        card.querySelector(".card-delete").onclick = (e) => {
-            e.stopPropagation();
-            if (confirm(`Delete "${series.title}"?`)) {
-                deleteSeries(series.id);
-                renderSearchResults(searchLibrary(document.getElementById("searchInput").value));
-            }
-        };
-
-        grid.appendChild(card);
-    });
+function getCurrentSeries() {
+    const id = Number(localStorage.getItem("currentSeries"));
+    const library = getLibrary();
+    return library.find(s => s.id === id);
 }
+
+/* -----------------------------
+   SAVE PROGRESS
+----------------------------- */
+
+function updateProgress(seriesId, chapter) {
+    const library = getLibrary();
+    const s = library.find(x => x.id === seriesId);
+    if (!s) return;
+
+    s.progress = chapter;
+    saveLibrary(library);
+}
+
+/* -----------------------------
+   BUILD CHAPTER URL
+----------------------------- */
+
+function buildChapterURL(series, chapterNumber) {
+    return `${series.baseURL}${chapterNumber}/`;
+}
+
+/* -----------------------------
+   EXPORT FUNCTIONS
+----------------------------- */
+
+window.app = {
+    addSeries,
+    loadLibrary,
+    deleteSeries,
+    getCurrentSeries,
+    updateProgress,
+    buildChapterURL
+};
