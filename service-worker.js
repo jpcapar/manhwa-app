@@ -1,36 +1,34 @@
 /* ============================================================
-   SERVICE WORKER — Clean PWA Cache
-   Works with GitHub Pages
+   SERVICE WORKER — Safe, Auto-Updating, Never Breaks CSS/JS
 ============================================================ */
 
-const CACHE_NAME = "manhwa-cache-v1";
+const CACHE_NAME = "manhwa-cache-v3"; // bump this when you deploy
 
 const CORE_FILES = [
-    "index.html",
-    "series.html",
-    "chapters.html",
-    "reader.html",
-    "manifest.json",
-    "css/styles.css",
-    "js/app.js",
-    "js/ui.js",
-    "js/debug.js"
+    "/",
+    "/index.html",
+    "/series.html",
+    "/chapters.html",
+    "/reader.html",
+    "/manifest.json",
+    "/css/styles.css",
+    "/js/app.js",
+    "/js/ui.js",
+    "/js/debug.js"
 ];
 
 /* -----------------------------
-   INSTALL — Cache Core Files
+   INSTALL — Cache core files
 ----------------------------- */
 self.addEventListener("install", (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(CORE_FILES);
-        })
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_FILES))
     );
-    self.skipWaiting();
+    self.skipWaiting(); // activate immediately
 });
 
 /* -----------------------------
-   ACTIVATE — Clear Old Caches
+   ACTIVATE — Remove old caches
 ----------------------------- */
 self.addEventListener("activate", (event) => {
     event.waitUntil(
@@ -42,21 +40,27 @@ self.addEventListener("activate", (event) => {
             )
         )
     );
-    self.clients.claim();
+    self.clients.claim(); // take control immediately
 });
 
 /* -----------------------------
-   FETCH — Cache First Strategy
+   FETCH — Network first
+   Prevents stale CSS/JS forever
 ----------------------------- */
 self.addEventListener("fetch", (event) => {
     event.respondWith(
-        caches.match(event.request).then((cached) => {
-            return (
-                cached ||
-                fetch(event.request).catch(() =>
-                    caches.match("index.html")
-                )
-            );
-        })
+        fetch(event.request)
+            .then((response) => {
+                // Save fresh version to cache
+                const clone = response.clone();
+                caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(event.request, clone);
+                });
+                return response;
+            })
+            .catch(() => {
+                // Offline fallback
+                return caches.match(event.request);
+            })
     );
 });
