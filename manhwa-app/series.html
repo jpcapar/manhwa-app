@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Series • Manhwa App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="app">
+  <aside class="sidebar">
+    <div class="sidebar-title">Manhwa</div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item">Library</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="series-banner">
+      <img id="seriesBannerImg" class="series-banner-img" src="assets/default-cover.png">
+      <div class="series-banner-overlay"></div>
+    </div>
+
+    <div class="series-info">
+      <div class="series-cover">
+        <img id="seriesCoverImg" class="series-cover-img" src="assets/default-cover.png">
+      </div>
+      <div class="series-meta">
+        <h1 id="seriesTitle" class="series-title"></h1>
+        <div id="seriesGenres" class="series-genres"></div>
+
+        <div class="series-status-row">
+          <div id="seriesStatusDot" class="status-dot status-reading"></div>
+          <div id="seriesStatusText" class="series-status-text">Reading</div>
+        </div>
+
+        <div class="series-progress">
+          <div class="progress-bar">
+            <div id="seriesProgressFill" class="progress-fill"></div>
+          </div>
+          <div id="seriesProgressText" class="progress-text"></div>
+        </div>
+
+        <div class="series-buttons">
+          <button id="openChaptersBtn" class="btn-primary">Open Chapters</button>
+          <button id="markCompletedBtn" class="btn-secondary">Mark Completed</button>
+          <button id="deleteSeriesBtn" class="btn-secondary">Delete</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/fetchMeta.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/autoDetect.js"></script>
+<script src="js/pwa.js"></script>
+<script src="js/debug.js"></script>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const id = params.get("id");
+const series = getSeriesById(id);
+
+if (!series) {
+  alert("Series not found");
+  window.location.href = "index.html";
+}
+
+document.getElementById("seriesTitle").textContent = series.title;
+document.getElementById("seriesCoverImg").src = series.image || "assets/default-cover.png";
+document.getElementById("seriesBannerImg").src = series.image || "assets/default-cover.png";
+
+const statusDot = document.getElementById("seriesStatusDot");
+const statusTextEl = document.getElementById("seriesStatusText");
+statusDot.classList.add(statusDotClass(series.status));
+statusTextEl.textContent = statusText(series.status);
+
+updateSeriesProgressUI(series);
+
+document.getElementById("openChaptersBtn").onclick = () => {
+  window.location.href = `chapters.html?id=${series.id}`;
+};
+
+document.getElementById("markCompletedBtn").onclick = () => {
+  updateSeries(series, { status: "completed", currentChapter: series.totalChapters });
+  window.location.reload();
+};
+
+document.getElementById("deleteSeriesBtn").onclick = () => {
+  if (confirm("Delete this series?")) {
+    deleteSeries(series.id);
+    window.location.href = "index.html";
+  }
+};
+
+async function checkForNewChapters(series) {
+  if (!series.url || !/webtoon\.xyz/i.test(series.url)) return;
+  const meta = await scrapeWebtoonXYZSeries(series.url);
+  if (meta.totalChapters && meta.totalChapters > (series.totalChapters || 0)) {
+    updateSeries(series, { totalChapters: meta.totalChapters });
+    updateSeriesProgressUI(series);
+    alert("New chapters detected and updated.");
+  }
+}
+
+checkForNewChapters(series);
+</script>
+
+</body>
+</html>
