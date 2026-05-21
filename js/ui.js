@@ -1,114 +1,101 @@
-const dropzone = document.getElementById("dropzone");
+/* ============================================================
+   UI.JS — Handles UI interactions
+   - Slide‑in panel open/close
+   - Form handling
+   - Button triggers
+============================================================ */
 
-if (dropzone) {
-    dropzone.addEventListener("dragover", e => {
-        e.preventDefault();
-        dropzone.classList.add("dragover");
-    });
+/* -----------------------------
+   ELEMENT REFERENCES
+----------------------------- */
 
-    dropzone.addEventListener("dragleave", () => {
-        dropzone.classList.remove("dragover");
-    });
+const panel = document.getElementById("addPanel");
+const overlay = document.getElementById("panelOverlay");
 
-    dropzone.addEventListener("drop", async e => {
-        e.preventDefault();
-        dropzone.classList.remove("dragover");
+const openTop = document.getElementById("openPanelTop");
+const openSide = document.getElementById("openPanelSide");
+const openFloat = document.getElementById("openPanelFloat");
+const closePanel = document.getElementById("closePanel");
 
-        const item = e.dataTransfer.items[0];
+const saveBtn = document.getElementById("saveSeries");
 
-        if (item.kind === "string") {
-            item.getAsString(async url => {
-                await handleDroppedURL(url.trim());
-            });
-        }
+const titleInput = document.getElementById("seriesTitle");
+const coverInput = document.getElementById("seriesCover");
+const baseURLInput = document.getElementById("seriesBaseURL");
+const totalInput = document.getElementById("seriesTotal");
+const startInput = document.getElementById("seriesStart");
+const statusInput = document.getElementById("seriesStatus");
 
-        if (item.kind === "file") {
-            const file = item.getAsFile();
-            await handleDroppedImage(file);
-        }
-    });
+/* -----------------------------
+   OPEN PANEL
+----------------------------- */
 
-    dropzone.addEventListener("click", async () => {
-        const url = prompt("Paste a manhwa URL:");
-        if (url) await handleDroppedURL(url.trim());
-    });
+function openAddPanel() {
+    overlay.classList.remove("hidden");
+    panel.classList.add("open");
 }
 
-async function handleDroppedURL(url) {
-    debugLog({ event: "DROP_URL", url });
+openTop.onclick = openAddPanel;
+openSide.onclick = openAddPanel;
+openFloat.onclick = openAddPanel;
 
-    if (!url.startsWith("http")) {
-        alert("Invalid URL");
+/* -----------------------------
+   CLOSE PANEL
+----------------------------- */
+
+function closeAddPanel() {
+    overlay.classList.add("hidden");
+    panel.classList.remove("open");
+}
+
+closePanel.onclick = closeAddPanel;
+overlay.onclick = closeAddPanel;
+
+/* -----------------------------
+   SAVE SERIES
+----------------------------- */
+
+saveBtn.onclick = async () => {
+    const title = titleInput.value.trim();
+    const baseURL = baseURLInput.value.trim();
+    const totalChapters = totalInput.value.trim();
+    const startChapter = startInput.value.trim();
+    const status = statusInput.value;
+
+    if (!title || !baseURL || !totalChapters) {
+        alert("Please fill in all required fields.");
         return;
     }
 
-    dropzone.textContent = "Scraping…";
+    const coverFile = coverInput.files[0] || null;
 
-    let meta;
-
-    if (/webtoon\.xyz/i.test(url)) {
-        debugLog({ event: "SCRAPER_SELECTED", type: "WebtoonXYZ" });
-        meta = await scrapeWebtoonXYZSeries(url);
-    } else {
-        debugLog({ event: "SCRAPER_SELECTED", type: "Generic" });
-        meta = await fetchMetadataFromURL(url);
-    }
-
-    debugLog({ event: "SCRAPER_META", meta });
-
-    const series = addSeries({
-        url,
-        title: meta.title || "Untitled",
-        image: meta.image,
-        baseChapterURL: meta.baseChapterURL,
-        totalChapters: meta.totalChapters || null,
-        currentChapter: 1
+    await app.addSeries({
+        title,
+        coverFile,
+        baseURL,
+        totalChapters,
+        startChapter,
+        status
     });
 
-    debugLog({ event: "SERIES_ADDED", series });
+    closeAddPanel();
 
-    dropzone.textContent = "Drag & drop a manhwa link here";
+    // Clear form
+    titleInput.value = "";
+    baseURLInput.value = "";
+    totalInput.value = "";
+    startInput.value = "1";
+    coverInput.value = "";
 
-    renderLibraryGrid();
-    window.location.href = `series.html?id=${series.id}`;
-}
+    app.loadLibrary();
+};
 
-async function handleDroppedImage(file) {
-    if (!file.type.startsWith("image/")) {
-        alert("Not an image");
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-        const imgURL = reader.result;
-
-        const series = addSeries({
-            url: "",
-            title: "Untitled",
-            image: imgURL,
-            baseChapterURL: null
-        });
-
-        renderLibraryGrid();
-        window.location.href = `series.html?id=${series.id}`;
-    };
-
-    reader.readAsDataURL(file);
-}
+/* -----------------------------
+   INITIAL LOAD
+----------------------------- */
 
 document.addEventListener("DOMContentLoaded", () => {
-    const navItems = document.querySelectorAll(".nav-item");
-    navItems.forEach(item => {
-        if (item.href && item.href === window.location.href) {
-            item.classList.add("active");
-        }
-    });
+    if (window.app && app.loadLibrary) {
+        app.loadLibrary();
+    }
 });
-
-function smoothScrollTo(y) {
-    window.scrollTo({
-        top: y,
-        behavior: "smooth"
-    });
-}
